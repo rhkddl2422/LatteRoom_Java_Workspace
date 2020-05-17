@@ -114,6 +114,7 @@ public class TempDevice extends Application implements TestClient {
 
 		// SharedObject
 		sharedObject = new TempSharedObject(this, toServer, toArduino);
+//		sharedObject = new TempSharedObject(this, toServer);
 		
 		
 		// UI ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -235,138 +236,235 @@ public class TempDevice extends Application implements TestClient {
 			send(message);
 		}
 		
-	}
+	} // ServerListener
+	
+	// for Test at Home
+	class SerialListener {
+		private Socket socket;
+		private BufferedReader serverIn;
+		private PrintWriter serverOut;
+		private ExecutorService executor;
+		
+		
+		public void initialize() {
+			
+			executor = Executors.newFixedThreadPool(1);
+			
+			Runnable runnable = () -> {
+				try {
+					socket = new Socket();
+					socket.connect(new InetSocketAddress("localhost", 60000));
+					serverIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+					serverOut = new PrintWriter(socket.getOutputStream());
+				} catch (IOException e) {
+//					e.printStackTrace();
+					close();
+					return;
+				}
+				
+				String line = "";
+				while(true) {
+					try {
+						line = serverIn.readLine();
+						
+						if(line == null) {
+							displayText("server error. disconnected");
+							throw new IOException();
+						} else {
+							displayText("Arduino? ] " + line);
+							
+							String inputLine = line;
+							float eventTemp = Float.parseFloat(inputLine);
+							
+							int currentTemp = sharedObject.getStates();
+							if(currentTemp==1000) {
+								sharedObject.setStates((int)(eventTemp));
+								temp.setRecentData(String.valueOf((int)(eventTemp)));
+								toServer.send(new Message(DEVICE_ID, temp.getRecentData()));
+								return;
+							}
+							
+							if(currentTemp + 0.8 < eventTemp) {
+								displayText("\t" + (currentTemp) + " < " + eventTemp);
+								currentTemp++; 
+								temp.setRecentData(String.valueOf(currentTemp));
+								sharedObject.setStates(currentTemp);
+								
+								Message message = new Message(temp.getRecentData());
+								displayText(message.toString());
+								toServer.send(gson.toJson(message));
+							} else if(currentTemp - 0.2 > eventTemp) {
+								displayText("\t" + (currentTemp) + " > " + eventTemp);
+								currentTemp--;
+								temp.setRecentData(String.valueOf(currentTemp));
+								sharedObject.setStates(currentTemp);
+								
+								Message message = new Message(temp.getRecentData());
+								displayText(message.toString());
+								toServer.send(gson.toJson(message));
+							} else {
+								displayText("\t" + (currentTemp) + " / " + eventTemp);
+							}
+							
+							
+						}
+					} catch (IOException e) {
+//						e.printStackTrace();
+						close();
+						break;
+					}
+				} // while()
+			};
+			executor.submit(runnable);
+		} // startClient()
+		
+		public void close() {
+			try {
+				if(socket != null && !socket.isClosed()) {
+					socket.close();
+					if(serverIn != null) serverIn.close();
+					if(serverOut != null) serverOut.close();
+				}
+				if(executor != null && !executor.isShutdown()) {
+					executor.shutdownNow();
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		} // stopClient()
+		
+		public void send(String msg) {
+			serverOut.println(msg);
+			serverOut.flush();
+		}
+		
+		public void send(Message msg) {
+			serverOut.println(gson.toJson(msg));
+//			serverOut.println("서버야 좀 받아라~!");
+			serverOut.flush();
+			displayText("서버로 보냈다!!! "+msg);
+		}
+		
+		public void send(String sensorID, String states) {
+			Message message = new Message(new SensorData(sensorID, states));
+			send(message);
+		}
+		
+	} // ServerListener
 	
 	
 	// ======================================================
-	class SerialListener implements SerialPortEventListener {
-		
-		SerialPort serialPort;
-		
-		private BufferedReader serialIn;
-		private PrintWriter serialOut;
-		private static final int TIME_OUT = 2000;
-		private static final int DATA_RATE = 9600;
-		
-		public void initialize() {
-			CommPortIdentifier portId = null;
-			try {
-				portId = CommPortIdentifier.getPortIdentifier(COMPORT_NAMES);
-			} catch (NoSuchPortException e1) {
-				e1.printStackTrace();
-			};
-			
-			if (portId == null) {
-				System.out.println("Could not find COM port.");
-				return;
-			}
-
-			try {
-				// open serial port, and use class name for the appName.
-				serialPort = (SerialPort) portId.open(this.getClass().getName(), TIME_OUT);
-
-				// set port parameters
-				serialPort.setSerialPortParams(
-						DATA_RATE,					// 9600 
-						SerialPort.DATABITS_8, 
-						SerialPort.STOPBITS_1,
-						SerialPort.PARITY_NONE);
-
-				// open the streams
-				serialIn = new BufferedReader(new InputStreamReader(serialPort.getInputStream()));
-				serialOut = new PrintWriter(serialPort.getOutputStream());
-
-				// add event listeners
-				serialPort.addEventListener(this);
-				serialPort.notifyOnDataAvailable(true);
-			} catch (Exception e) {
-				System.err.println(e.toString());
-			}
-		}
-
-		/**
-		 * This should be called when you stop using the port. This will prevent port
-		 * locking on platforms like Linux.
-		 */
-		public synchronized void close() {
-			if (serialPort != null) {
-				serialPort.removeEventListener();
-				serialPort.close();
-			}
-		}
-		
-		public synchronized void send(String msg) {
-			serialOut.println(msg);
-			serialOut.flush();
-		}
-
-		/**
-		 * Handle an event on the serial port. Read the data and print it.
-		 */
-		public synchronized void serialEvent(SerialPortEvent oEvent) {
-			if (oEvent.getEventType() == SerialPortEvent.DATA_AVAILABLE) {
-				try {
-					String inputLine = serialIn.readLine();
-//					displayText("Serial ] " + inputLine);
-					float eventTemp = Float.parseFloat(inputLine);
-					displayText("Serial ] " + eventTemp);
-					
-//					if(temp.getRecentData() == null) {
-//						int currentTemp = (int)eventTemp;
-//						// í˜„ìž¬ recentData, sharedObject.states ê°’ ì—†ì�„ ë•Œ
-//						temp.setRecentData(
-//								new SensorData(temp.getSensorID(), String.valueOf(currentTemp)));
+//	class SerialListener implements SerialPortEventListener {
+//		
+//		SerialPort serialPort;
+//		
+//		private BufferedReader serialIn;
+//		private PrintWriter serialOut;
+//		private static final int TIME_OUT = 2000;
+//		private static final int DATA_RATE = 9600;
+//		
+//		public void initialize() {
+//			CommPortIdentifier portId = null;
+//			try {
+//				portId = CommPortIdentifier.getPortIdentifier(COMPORT_NAMES);
+//			} catch (NoSuchPortException e1) {
+//				e1.printStackTrace();
+//			};
+//			
+//			if (portId == null) {
+//				System.out.println("Could not find COM port.");
+//				return;
+//			}
+//
+//			try {
+//				// open serial port, and use class name for the appName.
+//				serialPort = (SerialPort) portId.open(this.getClass().getName(), TIME_OUT);
+//
+//				// set port parameters
+//				serialPort.setSerialPortParams(
+//						DATA_RATE,					// 9600 
+//						SerialPort.DATABITS_8, 
+//						SerialPort.STOPBITS_1,
+//						SerialPort.PARITY_NONE);
+//
+//				// open the streams
+//				serialIn = new BufferedReader(new InputStreamReader(serialPort.getInputStream()));
+//				serialOut = new PrintWriter(serialPort.getOutputStream());
+//
+//				// add event listeners
+//				serialPort.addEventListener(this);
+//				serialPort.notifyOnDataAvailable(true);
+//			} catch (Exception e) {
+//				System.err.println(e.toString());
+//			}
+//		}
+//
+//		/**
+//		 * This should be called when you stop using the port. This will prevent port
+//		 * locking on platforms like Linux.
+//		 */
+//		public synchronized void close() {
+//			if (serialPort != null) {
+//				serialPort.removeEventListener();
+//				serialPort.close();
+//			}
+//		}
+//		
+//		public synchronized void send(String msg) {
+//			serialOut.println(msg);
+//			serialOut.flush();
+//		}
+//
+//		/**
+//		 * Handle an event on the serial port. Read the data and print it.
+//		 */
+//		public synchronized void serialEvent(SerialPortEvent oEvent) {
+//			if (oEvent.getEventType() == SerialPortEvent.DATA_AVAILABLE) {
+//				try {
+//					String inputLine = serialIn.readLine();
+////					displayText("Serial ] " + inputLine);
+//					float eventTemp = Float.parseFloat(inputLine);
+//					displayText("Serial ] " + eventTemp);
+//
+//					int currentTemp = sharedObject.getStates();
+//					if(currentTemp==1000) {
+//						sharedObject.setStates((int)(eventTemp+4));
+//						temp.setRecentData(String.valueOf((int)(eventTemp+4)));
+//						toServer.send(new Message(DEVICE_ID, temp.getRecentData()));
+//						return;
+//					}
+//					
+//					if(currentTemp + 0.8 < eventTemp) {
+//						displayText("\t" + (currentTemp) + " < " + eventTemp);
+//						currentTemp++; 
+//						temp.setRecentData(String.valueOf(currentTemp));
 //						sharedObject.setStates(currentTemp);
 //						
 //						Message message = new Message(temp.getRecentData());
+//						displayText(message.toString());
+//						toServer.send(gson.toJson(message));
+//					} else if(currentTemp - 0.2 > eventTemp) {
+//						displayText("\t" + (currentTemp) + " > " + eventTemp);
+//						currentTemp--;
+//						temp.setRecentData(String.valueOf(currentTemp));
+//						sharedObject.setStates(currentTemp);
 //						
-//						displayText("" + currentTemp + "\n--Message]"+message.toString()+"\n");
-//						System.out.println(message);
-//						toServer.send(message);
-//						return;
+//						Message message = new Message(temp.getRecentData());
+//						displayText(message.toString());
+//						toServer.send(gson.toJson(message));
+//					} else {
+//						displayText("\t" + (currentTemp) + " / " + eventTemp);
 //					}
+//				} catch (Exception e) {
+////					System.err.println(e.toString() + "  : prb de lecture");
+//				}
+//			}
+//			// Ignore all the other eventTypes, but you should consider the other ones.
+//		}
+//		
+//	} // SerialListener
 
-					int currentTemp = sharedObject.getStates();
-					if(currentTemp==1000) {
-						sharedObject.setStates((int)(eventTemp+4));
-						temp.setRecentData(String.valueOf((int)(eventTemp+4)));
-						toServer.send(new Message(DEVICE_ID, temp.getRecentData()));
-						return;
-					}
-					
-					if(currentTemp + 0.8 < eventTemp) {
-						displayText("\t" + (currentTemp) + " < " + eventTemp);
-						currentTemp++; 
-						temp.setRecentData(String.valueOf(currentTemp));
-						sharedObject.setStates(currentTemp);
-						
-						Message message = new Message(temp.getRecentData());
-						displayText(message.toString());
-						toServer.send(gson.toJson(message));
-					} else if(currentTemp - 0.2 > eventTemp) {
-						displayText("\t" + (currentTemp) + " > " + eventTemp);
-						currentTemp--;
-						temp.setRecentData(String.valueOf(currentTemp));
-						sharedObject.setStates(currentTemp);
-						
-						Message message = new Message(temp.getRecentData());
-						displayText(message.toString());
-						toServer.send(gson.toJson(message));
-					} else {
-						displayText("\t" + (currentTemp) + " / " + eventTemp);
-					}
-				} catch (Exception e) {
-//					System.err.println(e.toString() + "  : prb de lecture");
-				}
-			}
-			// Ignore all the other eventTypes, but you should consider the other ones.
-		}
-		
-		
-		
-	}
-
-}
+} // TempDevice
 
 class TempSharedObject {
 	// Temperature & Heat & Cool
@@ -378,6 +476,11 @@ class TempSharedObject {
 	private TestClient client;
 	private ServerListener toServer;
 	private SerialListener toArduino;
+	
+//	TempSharedObject(TestClient client, ServerListener toServer) {
+//		this.client = client;
+//		this.toServer = toServer;
+//	}
 	
 	TempSharedObject(TestClient client, ServerListener toServer, SerialListener toArduino) {
 		this.client = client;
@@ -416,33 +519,34 @@ class TempSharedObject {
 	private synchronized void control() {
 		if (hopeStates > states) {
 			if(cool.equals("ON")) {
-//				toArduino.send("COOLOFF");
+				toArduino.send("COOLOFF");
 				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
 				cool = "OFF";
 			}
 			
 			if(heat.equals("OFF")) {
-//				toArduino.send("HEATON");
+				toArduino.send("HEATON");
 //				toServer.send("HEAT","ON");
 				toServer.send(new Message(client.getDeviceID(), "HEAT", "ON"));
 				heat = "ON";
 			}
 		} else if (hopeStates < states) {
 			if(heat.equals("ON")) {
-//				toArduino.send("HEATOFF");
+				toArduino.send("HEATOFF");
 //				toServer.send("HEAT", "OFF");
 				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
 				heat = "OFF";
 			}
 			
 			if(cool.equals("OFF")) {
-//				toArduino.send("COOLON");
+				toArduino.send("COOLON");
 //				toServer.send("COOL", "ON");
 				toServer.send(new Message(client.getDeviceID(), "COOL", "ON"));
 				cool = "ON";
 			}
 		} else {
 			if(heat.equals("ON")) {
+				toArduino.send("BOTHOFF");
 //				toArduino.send("HEATOFF");
 //				toServer.send("HEAT", "OFF");
 				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
@@ -450,7 +554,7 @@ class TempSharedObject {
 			}
 			
 			if(cool.equals("ON")) {
-//				toArduino.send("COOLOFF");
+				toArduino.send("COOLOFF");
 //				toServer.send("COOL","OFF");
 				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
 				cool = "OFF";
