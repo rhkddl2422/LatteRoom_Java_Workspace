@@ -16,8 +16,8 @@ import java.util.concurrent.Executors;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import arduino.device.TempDevice.SerialListener;
-import arduino.device.TempDevice.ServerListener;
+import arduino.device.BedDevice.SerialListener;
+import arduino.device.BedDevice.ServerListener;
 import arduino.device.vo.*;
 import gnu.io.CommPortIdentifier;
 import gnu.io.NoSuchPortException;
@@ -31,9 +31,9 @@ import javafx.scene.control.TextArea;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 
-public class TempDevice extends Application implements TestClient {
+public class BedDevice extends Application implements TestClient {
 
-	private static final String DEVICE_ID = "LATTE01";
+	private static final String DEVICE_ID = "LATTE03";
 	private static final String DEVICE_TYPE = "DEVICE";		// App : "USER"
 	
 	private static final String COMPORT_NAMES = "COM14";
@@ -46,11 +46,13 @@ public class TempDevice extends Application implements TestClient {
 	
 	private ServerListener toServer = new ServerListener();
 	private SerialListener toArduino = new SerialListener();
-	private TempSharedObject sharedObject;
+	private BedSharedObject sharedObject;
 	
-	private Sensor temp = new Sensor(this, "TEMP", "TEMP");
-	private Sensor heat = new Sensor(this, "HEAT", "HEAT");
-	private Sensor cool = new Sensor(this, "COOL", "COOL");
+//	private Sensor temp = new Sensor(this, "TEMP", "TEMP");
+//	private Sensor heat = new Sensor(this, "HEAT", "HEAT");
+//	private Sensor cool = new Sensor(this, "COOL", "COOL");
+	private Sensor bed = new Sensor(this, "BED", "BED");
+	
 	
 	private static Gson gson = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS").create();
 	
@@ -65,14 +67,6 @@ public class TempDevice extends Application implements TestClient {
 	public static Gson getGson() {
 		return gson;
 	}
-	
-//	public static String getDeviceId() {
-//		return DEVICE_ID;
-//	}
-//	
-//	public static String getDeviceType() {
-//		return DEVICE_TYPE;
-//	}
 	
 	@Override
 	public String getDeviceID() {
@@ -89,19 +83,10 @@ public class TempDevice extends Application implements TestClient {
 	@Override
 	public String getSensorList() {
 		List<Sensor> sensorList = new ArrayList<Sensor>();
-		sensorList.add(temp);
-		sensorList.add(heat);
-		sensorList.add(cool);
+		sensorList.add(bed);
 		return gson.toJson(sensorList);
 	}
 	
-//	public static List<Sensor> getSensorList() {
-//		List<Sensor> sensorList = new ArrayList<Sensor>();
-//		sensorList.add(temp);
-//		sensorList.add(heat);
-//		sensorList.add(cool);
-//		return sensorList;		
-//	}
 	
 	
 	// ======================================================
@@ -109,12 +94,11 @@ public class TempDevice extends Application implements TestClient {
 	public void start(Stage primaryStage) throws Exception {
 		
 		// Logic
-		toServer.connect();
+		toServer.initialize();
 		toArduino.initialize();
 
 		// SharedObject
-		sharedObject = new TempSharedObject(this, toServer, toArduino);
-//		sharedObject = new TempSharedObject(this, toServer);
+		sharedObject = new BedSharedObject(this, toServer, toArduino);
 		
 		
 		// UI ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -131,7 +115,7 @@ public class TempDevice extends Application implements TestClient {
 		primaryStage.setScene(scene);
 		primaryStage.setTitle("DeviceTemp");
 		primaryStage.setOnCloseRequest((e) -> {
-			toServer.disconnect();
+			toServer.close();
 			toArduino.close();
 		});
 		primaryStage.show();
@@ -154,7 +138,7 @@ public class TempDevice extends Application implements TestClient {
 		private ExecutorService executor;
 		
 		
-		public void connect() {
+		public void initialize() {
 			
 			executor = Executors.newFixedThreadPool(1);
 			
@@ -166,7 +150,7 @@ public class TempDevice extends Application implements TestClient {
 					serverOut = new PrintWriter(socket.getOutputStream());
 				} catch (IOException e) {
 //					e.printStackTrace();
-					disconnect();
+					close();
 					return;
 				}
 				
@@ -189,14 +173,15 @@ public class TempDevice extends Application implements TestClient {
 						} else {
 							displayText("Server ] " + line);
 							
-							Message messate = gson.fromJson(line, Message.class);
-							int hopeTemp = Integer.parseInt(gson.fromJson(messate.getJsonData(), SensorData.class).getStates());
-							sharedObject.setHopeStates(hopeTemp);
+							Message message = gson.fromJson(line, Message.class);
+							bed.setRecentData(message.getSensorData());
+							
+//							sharedObject.setHopeStates(hopeTemp);
 							
 						}
 					} catch (IOException e) {
 //						e.printStackTrace();
-						disconnect();
+						close();
 						break;
 					}
 				} // while()
@@ -204,7 +189,7 @@ public class TempDevice extends Application implements TestClient {
 			executor.submit(runnable);
 		} // startClient()
 		
-		public void disconnect() {
+		public void close() {
 			try {
 				if(socket != null && !socket.isClosed()) {
 					socket.close();
@@ -313,35 +298,7 @@ public class TempDevice extends Application implements TestClient {
 					float eventTemp = Float.parseFloat(inputLine);
 					displayText("Serial ] " + eventTemp);
 
-					int currentTemp = sharedObject.getStates();
-					if(currentTemp==1000) {
-						sharedObject.setStates((int)(eventTemp+4));
-						temp.setRecentData(String.valueOf((int)(eventTemp+4)));
-						toServer.send(new Message(DEVICE_ID, temp.getRecentData()));
-						return;
-					}
 					
-					if(currentTemp + 0.8 < eventTemp) {
-						displayText("\t" + (currentTemp) + " < " + eventTemp);
-						currentTemp++; 
-						temp.setRecentData(String.valueOf(currentTemp));
-						sharedObject.setStates(currentTemp);
-						
-						Message message = new Message(temp.getRecentData());
-						displayText(message.toString());
-						toServer.send(gson.toJson(message));
-					} else if(currentTemp - 0.2 > eventTemp) {
-						displayText("\t" + (currentTemp) + " > " + eventTemp);
-						currentTemp--;
-						temp.setRecentData(String.valueOf(currentTemp));
-						sharedObject.setStates(currentTemp);
-						
-						Message message = new Message(temp.getRecentData());
-						displayText(message.toString());
-						toServer.send(gson.toJson(message));
-					} else {
-						displayText("\t" + (currentTemp) + " / " + eventTemp);
-					}
 				} catch (Exception e) {
 //					System.err.println(e.toString() + "  : prb de lecture");
 				}
@@ -353,23 +310,20 @@ public class TempDevice extends Application implements TestClient {
 
 } // TempDevice
 
-class TempSharedObject {
+class BedSharedObject {
 	// Temperature & Heat & Cool
 	private int hopeStates = 23;
 	private int states = 1000;
-	private String heat = "OFF";
-	private String cool = "OFF";
-	
 	private TestClient client;
 	private ServerListener toServer;
 	private SerialListener toArduino;
 	
-//	TempSharedObject(TestClient client, ServerListener toServer) {
+//	BedSharedObject(TestClient client, ServerListener toServer) {
 //		this.client = client;
 //		this.toServer = toServer;
 //	}
 	
-	TempSharedObject(TestClient client, ServerListener toServer, SerialListener toArduino) {
+	BedSharedObject(TestClient client, ServerListener toServer, SerialListener toArduino) {
 		this.client = client;
 		this.toServer = toServer;
 		this.toArduino = toArduino;
@@ -405,47 +359,47 @@ class TempSharedObject {
 	
 	private synchronized void control() {
 		if (hopeStates > states) {
-			if(cool.equals("ON")) {
-				toArduino.send("COOLOFF");
-				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
-				cool = "OFF";
-			}
-			
-			if(heat.equals("OFF")) {
-				toArduino.send("HEATON");
-//				toServer.send("HEAT","ON");
-				toServer.send(new Message(client.getDeviceID(), "HEAT", "ON"));
-				heat = "ON";
-			}
-		} else if (hopeStates < states) {
-			if(heat.equals("ON")) {
-				toArduino.send("HEATOFF");
-//				toServer.send("HEAT", "OFF");
-				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
-				heat = "OFF";
-			}
-			
-			if(cool.equals("OFF")) {
-				toArduino.send("COOLON");
-//				toServer.send("COOL", "ON");
-				toServer.send(new Message(client.getDeviceID(), "COOL", "ON"));
-				cool = "ON";
-			}
-		} else {
-			if(heat.equals("ON")) {
-//				toArduino.send("BOTHOFF");
-				toArduino.send("HEATOFF");
-//				toServer.send("HEAT", "OFF");
-				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
-				heat = "OFF";
-			}
-			
-			if(cool.equals("ON")) {
-				toArduino.send("COOLOFF");
-//				toServer.send("COOL","OFF");
-				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
-				cool = "OFF";
-			}
+//			if(cool.equals("ON")) {
+//				toArduino.send("COOLOFF");
+//				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
+//				cool = "OFF";
+//			}
+//			
+//			if(heat.equals("OFF")) {
+//				toArduino.send("HEATON");
+////				toServer.send("HEAT","ON");
+//				toServer.send(new Message(client.getDeviceID(), "HEAT", "ON"));
+//				heat = "ON";
+//			}
+//		} else if (hopeStates < states) {
+//			if(heat.equals("ON")) {
+//				toArduino.send("HEATOFF");
+////				toServer.send("HEAT", "OFF");
+//				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
+//				heat = "OFF";
+//			}
+//			
+//			if(cool.equals("OFF")) {
+//				toArduino.send("COOLON");
+////				toServer.send("COOL", "ON");
+//				toServer.send(new Message(client.getDeviceID(), "COOL", "ON"));
+//				cool = "ON";
+//			}
+//		} else {
+//			if(heat.equals("ON")) {
+////				toArduino.send("BOTHOFF");
+//				toArduino.send("HEATOFF");
+////				toServer.send("HEAT", "OFF");
+//				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
+//				heat = "OFF";
+//			}
+//			
+//			if(cool.equals("ON")) {
+//				toArduino.send("COOLOFF");
+////				toServer.send("COOL","OFF");
+//				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
+//				cool = "OFF";
+//			}
 		}
 	}
 	
