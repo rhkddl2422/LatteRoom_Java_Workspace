@@ -140,22 +140,32 @@ public class ServerService {
 	public void deviceControl(SensorData data) {
 		
 		Device target = null;
+		List<String> targetList = null;
 		
 		if (data.getSensorID().equals("TEMP")) {
 			hopeTemp.setRecentData(data);
-			target = this.deviceList.get(hopeTemp.getDeviceID());
+			targetList = this.typeTEMP;
 		} else if (data.getSensorID().equals("LIGHT")) {
 			hopeLight.setRecentData(data);
-			target = this.deviceList.get(hopeLight.getDeviceID());
+			targetList = this.typeLIGHT;
+//			target = this.deviceList.get(hopeLight.getDeviceID());
 		} else if (data.getSensorID().equals("BED")) {
 			hopeBed.setRecentData(data);
-			target = this.deviceList.get(hopeBed.getDeviceID());
+			targetList = this.typeBED;
+//			target = this.deviceList.get(hopeBed.getDeviceID());
 		}
 		
-		if(target != null) {
-			System.out.println(target.getDeviceID() + " send");
-			target.send(new Message(data));
+		if(targetList != null) {
+			for (String key : targetList) {
+				target = this.deviceList.get(key);
+				target.send(new Message(data));
+			}
 		}
+		
+//		if(target != null) {
+//			System.out.println(target.getDeviceID() + " send");
+//			target.send(new Message(data));
+//		}
 		
 //		Sensor sensor = this.sensorList.get(data.getSensorID());
 //		Device target = this.deviceList.get(sensor.getDeviceID());
