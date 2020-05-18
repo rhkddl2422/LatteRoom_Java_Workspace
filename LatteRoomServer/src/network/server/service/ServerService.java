@@ -145,9 +145,13 @@ public class ServerService {
 		if (data.getSensorID().equals("TEMP")) {
 			hopeTemp.setRecentData(data);
 			targetList = this.typeTEMP;
+			System.out.println("온도조절 대상 + " + targetList.size());
+			System.out.println(data.getStateDetail());
 		} else if (data.getSensorID().equals("LIGHT")) {
 			hopeLight.setRecentData(data);
 			targetList = this.typeLIGHT;
+			System.out.println("밝기조절 대상 + " + targetList.size());
+			System.out.println(data.getStateDetail());
 //			target = this.deviceList.get(hopeLight.getDeviceID());
 		} else if (data.getSensorID().equals("BED")) {
 			hopeBed.setRecentData(data);
@@ -254,6 +258,7 @@ public class ServerService {
 				Sensor target = this.sensorList.get(data.getJsonData());
 				if(target != null) {
 					System.out.println("send to " + receiver.getDeviceID());
+//					(deviceList.get(target.getDeviceID())).send(new Message(target.getRecentData()));
 					receiver.send(new Message(target.getRecentData()));
 				}
 				else

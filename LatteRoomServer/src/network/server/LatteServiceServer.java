@@ -61,7 +61,7 @@ public class LatteServiceServer {
 						break;
 					} else continue;
 				} catch (IOException e) {
-//					e.printStackTrace();
+					e.printStackTrace();
 					break;
 				}
 			}
