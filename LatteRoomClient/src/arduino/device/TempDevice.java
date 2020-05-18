@@ -6,9 +6,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.InetSocketAddress;
-import java.util.Map;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -36,9 +34,8 @@ public class TempDevice extends Application implements TestClient {
 	private static final String DEVICE_ID = "LATTE01";
 	private static final String DEVICE_TYPE = "DEVICE";		// App : "USER"
 	
-	private static final String COMPORT_NAMES = "COM14";
-//	private static final String SERVER_ADDR = "70.12.60.105";
-	private static final String SERVER_ADDR = "localhost";
+	private static final String COMPORT_NAMES = "COM4";
+	private static final String SERVER_ADDR = "70.12.60.105";
 	private static final int SERVER_PORT = 55566;
 	
 	private BorderPane root;
@@ -66,14 +63,6 @@ public class TempDevice extends Application implements TestClient {
 		return gson;
 	}
 	
-//	public static String getDeviceId() {
-//		return DEVICE_ID;
-//	}
-//	
-//	public static String getDeviceType() {
-//		return DEVICE_TYPE;
-//	}
-	
 	@Override
 	public String getDeviceID() {
 		// TODO Auto-generated method stub
@@ -94,14 +83,6 @@ public class TempDevice extends Application implements TestClient {
 		sensorList.add(cool);
 		return gson.toJson(sensorList);
 	}
-	
-//	public static List<Sensor> getSensorList() {
-//		List<Sensor> sensorList = new ArrayList<Sensor>();
-//		sensorList.add(temp);
-//		sensorList.add(heat);
-//		sensorList.add(cool);
-//		return sensorList;		
-//	}
 	
 	
 	// ======================================================
@@ -226,9 +207,9 @@ public class TempDevice extends Application implements TestClient {
 		
 		public void send(Message msg) {
 			serverOut.println(gson.toJson(msg));
-//			serverOut.println("서버야 좀 받아라~!");
+//			serverOut.println("ì„œë²„ì•¼ ì¢€ ë°›ì•„ë�¼~!");
 			serverOut.flush();
-			displayText("서버로 보냈다!!! "+msg);
+			displayText("sendMessage} "+msg);
 		}
 		
 		public void send(String sensorID, String states) {
@@ -363,11 +344,7 @@ class TempSharedObject {
 	private TestClient client;
 	private ServerListener toServer;
 	private SerialListener toArduino;
-	
-//	TempSharedObject(TestClient client, ServerListener toServer) {
-//		this.client = client;
-//		this.toServer = toServer;
-//	}
+
 	
 	TempSharedObject(TestClient client, ServerListener toServer, SerialListener toArduino) {
 		this.client = client;
@@ -380,12 +357,6 @@ class TempSharedObject {
 	}
 	
 	public synchronized void setHopeStates(int hopeStates) {
-//		if(hopeStates == 1000) {
-//			this.hopeStates = hopeStates;
-//		} else {
-//			this.hopeStates = hopeStates;
-//			control();
-//		}
 		this.hopeStates = hopeStates;
 		control();
 	}
@@ -395,10 +366,6 @@ class TempSharedObject {
 	}
 	
 	public synchronized void setStates(int states) {
-//		if(states == 1000) {
-//			this.states = states;
-//		} else {
-//		}
 		this.states = states;
 		control();
 	}
@@ -413,21 +380,18 @@ class TempSharedObject {
 			
 			if(heat.equals("OFF")) {
 				toArduino.send("HEATON");
-//				toServer.send("HEAT","ON");
 				toServer.send(new Message(client.getDeviceID(), "HEAT", "ON"));
 				heat = "ON";
 			}
 		} else if (hopeStates < states) {
 			if(heat.equals("ON")) {
 				toArduino.send("HEATOFF");
-//				toServer.send("HEAT", "OFF");
 				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
 				heat = "OFF";
 			}
 			
 			if(cool.equals("OFF")) {
 				toArduino.send("COOLON");
-//				toServer.send("COOL", "ON");
 				toServer.send(new Message(client.getDeviceID(), "COOL", "ON"));
 				cool = "ON";
 			}
@@ -435,14 +399,12 @@ class TempSharedObject {
 			if(heat.equals("ON")) {
 //				toArduino.send("BOTHOFF");
 				toArduino.send("HEATOFF");
-//				toServer.send("HEAT", "OFF");
 				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
 				heat = "OFF";
 			}
 			
 			if(cool.equals("ON")) {
 				toArduino.send("COOLOFF");
-//				toServer.send("COOL","OFF");
 				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
 				cool = "OFF";
 			}

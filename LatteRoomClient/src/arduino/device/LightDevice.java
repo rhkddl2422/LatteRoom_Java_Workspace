@@ -6,9 +6,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.InetSocketAddress;
-import java.util.Map;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,12 +31,12 @@ import javafx.stage.Stage;
 
 public class LightDevice extends Application implements TestClient {
 
-	private static final String DEVICE_ID = "LATTE02";
+	private static final String DEVICE_ID = "LATTE03";
 	private static final String DEVICE_TYPE = "DEVICE";		// App : "USER"
 	
-	private static final String COMPORT_NAMES = "COM14";
-//	private static final String SERVER_ADDR = "70.12.60.105";
-	private static final String SERVER_ADDR = "localhost";
+	private static final String COMPORT_NAMES = "COM5";
+	private static final String SERVER_ADDR = "70.12.60.105";
+//	private static final String SERVER_ADDR = "localhost";
 	private static final int SERVER_PORT = 55566;
 	
 	private BorderPane root;
@@ -48,10 +46,7 @@ public class LightDevice extends Application implements TestClient {
 	private SerialListener toArduino = new SerialListener();
 	private LightSharedObject sharedObject;
 	
-//	private Sensor temp = new Sensor(this, "TEMP", "TEMP");
-//	private Sensor heat = new Sensor(this, "HEAT", "HEAT");
-//	private Sensor cool = new Sensor(this, "COOL", "COOL");
-	private Sensor light = new Sensor(this, "LIGHT", "LIGHT");
+	private Sensor lightSensor = new Sensor(this, "LIGHT", "LIGHT");
 	
 	
 	private static Gson gson = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS").create();
@@ -83,7 +78,7 @@ public class LightDevice extends Application implements TestClient {
 	@Override
 	public String getSensorList() {
 		List<Sensor> sensorList = new ArrayList<Sensor>();
-		sensorList.add(light);
+		sensorList.add(lightSensor);
 		return gson.toJson(sensorList);
 	}
 	
@@ -174,9 +169,21 @@ public class LightDevice extends Application implements TestClient {
 							displayText("Server ] " + line);
 							
 							Message message = gson.fromJson(line, Message.class);
-							light.setRecentData(message.getSensorData());
 							
-//							sharedObject.setHopeStates(hopeTemp);
+							try {
+							SensorData data = gson.fromJson(message.getJsonData(), SensorData.class);
+							
+							lightSensor.setRecentData(data.getStateDetail());
+							
+							if(data.getStates().equals("ON")) {
+				                toArduino.send(data.getStateDetail());
+								
+			                }else if(data.getStates().equals("OFF")) {
+			                	toArduino.send("0");
+			                }
+							}catch(Exception e2) {
+								displayText(e2.toString());
+							}
 							
 						}
 					} catch (IOException e) {
@@ -211,9 +218,8 @@ public class LightDevice extends Application implements TestClient {
 		
 		public void send(Message msg) {
 			serverOut.println(gson.toJson(msg));
-//			serverOut.println("서버야 좀 받아라~!");
 			serverOut.flush();
-			displayText("서버로 보냈다!!! "+msg);
+			displayText("Message전송! "+msg);
 		}
 		
 		public void send(String sensorID, String states) {
@@ -294,10 +300,7 @@ public class LightDevice extends Application implements TestClient {
 			if (oEvent.getEventType() == SerialPortEvent.DATA_AVAILABLE) {
 				try {
 					String inputLine = serialIn.readLine();
-//					displayText("Serial ] " + inputLine);
-					float eventTemp = Float.parseFloat(inputLine);
-					displayText("Serial ] " + eventTemp);
-
+					displayText("get : " + inputLine);
 					
 				} catch (Exception e) {
 //					System.err.println(e.toString() + "  : prb de lecture");
@@ -318,10 +321,6 @@ class LightSharedObject {
 	private ServerListener toServer;
 	private SerialListener toArduino;
 	
-//	LightSharedObject(TestClient client, ServerListener toServer) {
-//		this.client = client;
-//		this.toServer = toServer;
-//	}
 	
 	LightSharedObject(TestClient client, ServerListener toServer, SerialListener toArduino) {
 		this.client = client;
@@ -334,12 +333,6 @@ class LightSharedObject {
 	}
 	
 	public synchronized void setHopeStates(int hopeStates) {
-//		if(hopeStates == 1000) {
-//			this.hopeStates = hopeStates;
-//		} else {
-//			this.hopeStates = hopeStates;
-//			control();
-//		}
 		this.hopeStates = hopeStates;
 		control();
 	}
@@ -349,58 +342,12 @@ class LightSharedObject {
 	}
 	
 	public synchronized void setStates(int states) {
-//		if(states == 1000) {
-//			this.states = states;
-//		} else {
-//		}
 		this.states = states;
 		control();
 	}
 	
 	private synchronized void control() {
-		if (hopeStates > states) {
-//			if(cool.equals("ON")) {
-//				toArduino.send("COOLOFF");
-//				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
-//				cool = "OFF";
-//			}
-//			
-//			if(heat.equals("OFF")) {
-//				toArduino.send("HEATON");
-////				toServer.send("HEAT","ON");
-//				toServer.send(new Message(client.getDeviceID(), "HEAT", "ON"));
-//				heat = "ON";
-//			}
-//		} else if (hopeStates < states) {
-//			if(heat.equals("ON")) {
-//				toArduino.send("HEATOFF");
-////				toServer.send("HEAT", "OFF");
-//				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
-//				heat = "OFF";
-//			}
-//			
-//			if(cool.equals("OFF")) {
-//				toArduino.send("COOLON");
-////				toServer.send("COOL", "ON");
-//				toServer.send(new Message(client.getDeviceID(), "COOL", "ON"));
-//				cool = "ON";
-//			}
-//		} else {
-//			if(heat.equals("ON")) {
-////				toArduino.send("BOTHOFF");
-//				toArduino.send("HEATOFF");
-////				toServer.send("HEAT", "OFF");
-//				toServer.send(new Message(client.getDeviceID(), "HEAT", "OFF"));
-//				heat = "OFF";
-//			}
-//			
-//			if(cool.equals("ON")) {
-//				toArduino.send("COOLOFF");
-////				toServer.send("COOL","OFF");
-//				toServer.send(new Message(client.getDeviceID(), "COOL", "OFF"));
-//				cool = "OFF";
-//			}
-		}
+		
 	}
 	
 }
