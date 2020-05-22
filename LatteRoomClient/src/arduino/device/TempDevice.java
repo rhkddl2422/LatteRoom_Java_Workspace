@@ -48,9 +48,11 @@ public class TempDevice extends Application implements TestClient {
 	private Sensor temp = new Sensor(this, "TEMP", "TEMP");
 	private Sensor heat = new Sensor(this, "HEAT", "HEAT");
 	private Sensor cool = new Sensor(this, "COOL", "COOL");
+	private Sensor humidity = new Sensor(this,"HUMIDITY","HUMIDITY");
 	
 	private static Gson gson = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS").create();
 	
+	AvgTemp avgTemp = new 	AvgTemp();
 	
 	// ======================================================
 	public void displayText(String msg) {
@@ -81,6 +83,7 @@ public class TempDevice extends Application implements TestClient {
 		sensorList.add(temp);
 		sensorList.add(heat);
 		sensorList.add(cool);
+		sensorList.add(humidity);
 		return gson.toJson(sensorList);
 	}
 	
@@ -231,6 +234,8 @@ public class TempDevice extends Application implements TestClient {
 		private static final int TIME_OUT = 2000;
 		private static final int DATA_RATE = 9600;
 		
+		private int cnt = 0;
+		
 		public void initialize() {
 			CommPortIdentifier portId = null;
 			try {
@@ -289,21 +294,44 @@ public class TempDevice extends Application implements TestClient {
 		public synchronized void serialEvent(SerialPortEvent oEvent) {
 			if (oEvent.getEventType() == SerialPortEvent.DATA_AVAILABLE) {
 				try {
+					
 					String inputLine = serialIn.readLine();
 //					displayText("Serial ] " + inputLine);
-					float eventTemp = Float.parseFloat(inputLine);
-					displayText("Serial ] " + eventTemp);
-
+					
+					
+					float eventTemp = Float.parseFloat(inputLine.split(",")[0]);
+					int eventHumidity = Integer.parseInt(inputLine.split(",")[1]);
+					
+					displayText("[Serial Temp/Humidity] " + eventTemp + " / " + eventHumidity);
+					
 					int currentTemp = sharedObject.getStates();
+					int currentHumidity = sharedObject.getHumidity();
+					
 					if(currentTemp==1000) {
-						sharedObject.setStates((int)(eventTemp+4));
-						temp.setRecentData(String.valueOf((int)(eventTemp+4)));
+						
+						if(cnt == 0) {
+							cnt++;
+							return;
+						} else if(cnt > 0 && cnt < 5) {
+							avgTemp.add(eventTemp);
+							cnt++;
+							return;
+						}
+
+						avgTemp.add(eventTemp);
+						float avg = avgTemp.getAvg();
+						
+						sharedObject.setStates((int)avg);
+						temp.setRecentData(String.valueOf(avg));
 						toServer.send(new Message(DEVICE_ID, temp.getRecentData()));
 						return;
 					}
 					
-					if(currentTemp + 0.8 < eventTemp) {
-						displayText("\t" + (currentTemp) + " < " + eventTemp);
+					avgTemp.add(eventTemp);
+					float avg = avgTemp.getAvg();
+					
+					if(currentTemp + 0.8 < avg) {
+						displayText("\t" + (currentTemp) + " < " + avg);
 						currentTemp++; 
 						temp.setRecentData(String.valueOf(currentTemp));
 						sharedObject.setStates(currentTemp);
@@ -311,8 +339,8 @@ public class TempDevice extends Application implements TestClient {
 						Message message = new Message(temp.getRecentData());
 						displayText(message.toString());
 						toServer.send(gson.toJson(message));
-					} else if(currentTemp - 0.2 > eventTemp) {
-						displayText("\t" + (currentTemp) + " > " + eventTemp);
+					} else if(currentTemp - 0.2 > avg) {
+						displayText("\t" + (currentTemp) + " > " + avg);
 						currentTemp--;
 						temp.setRecentData(String.valueOf(currentTemp));
 						sharedObject.setStates(currentTemp);
@@ -321,8 +349,17 @@ public class TempDevice extends Application implements TestClient {
 						displayText(message.toString());
 						toServer.send(gson.toJson(message));
 					} else {
-						displayText("\t" + (currentTemp) + " / " + eventTemp);
+						displayText("\t" + (currentTemp) + " / " + avg);
 					}
+					
+				    if(currentHumidity!=eventHumidity) {
+				    	//같은지 다른지만 평가
+				    	humidity.setRecentData(String.valueOf(eventHumidity));
+				    	toServer.send(new Message(DEVICE_ID, humidity.getRecentData()));
+						return;
+				    	
+				    }
+					
 				} catch (Exception e) {
 //					System.err.println(e.toString() + "  : prb de lecture");
 				}
@@ -338,6 +375,7 @@ class TempSharedObject {
 	// Temperature & Heat & Cool
 	private int hopeStates = 23;
 	private int states = 1000;
+	private int humidity = 1000;
 	private String heat = "OFF";
 	private String cool = "OFF";
 	
@@ -370,6 +408,14 @@ class TempSharedObject {
 		control();
 	}
 	
+	public synchronized int getHumidity() {
+		return humidity;
+	}
+	
+	public void setHumidity(int humidity) {
+		this.humidity = humidity;
+	}
+
 	private synchronized void control() {
 		if (hopeStates > states) {
 			if(cool.equals("ON")) {
